@@ -1,0 +1,16 @@
+# requirements.txt
+fastapi
+uvicorn[standard]
+aiosqlite
+python-dotenv
+pytrends
+google-genai>=1.5.0
+google-api-core>=2.24.2 
+pydantic
+TikTokApi
+aiohttp
+PyYAML
+textblob
+nrclex
+tenacity
+

@@ -1,0 +1,303 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viral Video Content Pipeline</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e; --primary-color: #16213e; --secondary-color: #0f3460;
+            --accent-color: #e94560; --text-color: #dcdcdc; --text-muted: #888;
+            --border-color: #555; --success-color: #4CAF50; --warning-color: #ff9800;
+            --error-color: #f44336; --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body { font-family: var(--font-family); background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; background-color: var(--primary-color); border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4); }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--secondary-color); padding-bottom: 15px; margin-bottom: 20px; }
+        header h1 { color: var(--accent-color); margin: 0; }
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; }
+        .tab-button { padding: 10px 20px; cursor: pointer; background-color: transparent; border: none; color: var(--text-muted); font-size: 1.1em; border-bottom: 3px solid transparent; transition: all 0.3s ease; }
+        .tab-button.active { color: var(--accent-color); border-bottom: 3px solid var(--accent-color); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .controls, .settings { background-color: var(--secondary-color); padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .control-group { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 10px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); box-sizing: border-box; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; font-weight: bold; transition: all 0.3s ease; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background-color: var(--accent-color); color: white; }
+        .btn-secondary { background-color: var(--secondary-color); color: var(--text-color); border: 1px solid var(--border-color); }
+        .btn-success { background-color: var(--success-color); color: white; }
+        .btn-warning { background-color: var(--warning-color); color: white; }
+        .content-section { padding: 15px; }
+        .content-section h3 { color: var(--accent-color); }
+        .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .card { background-color: var(--secondary-color); padding: 15px; border-radius: 8px; border-left: 4px solid var(--accent-color); }
+        .card p { margin: 5px 0; font-size: 0.9em; }
+        .card .label { font-weight: bold; color: var(--text-muted); }
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; background-color: var(--text-muted); transition: background-color 0.5s ease; }
+        .status-indicator.running { background-color: var(--warning-color); animation: pulse 1.5s infinite; }
+        .status-indicator.complete { background-color: var(--success-color); }
+        .status-indicator.error { background-color: var(--error-color); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); } }
+        #log-output { background-color: #000; color: #0f0; padding: 15px; border-radius: 5px; height: 200px; overflow-y: scroll; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; white-space: pre-wrap; }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Viral Video Content Pipeline</h1>
+            <div class="project-selector">
+                <label for="project-select">Current Project:</label>
+                <select id="project-select"></select>
+                <button id="new-project-btn" class="btn btn-secondary">New Project</button>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'workflow-tab')">Workflow</button>
+            <button class="tab-button" onclick="openTab(event, 'settings-tab')">Settings</button>
+        </div>
+
+        <div id="workflow-tab" class="tab-content active">
+            <section class="controls">
+                <h2>Controls</h2>
+                <div class="control-group">
+                    <button id="run-trends" class="btn btn-primary"><span class="status-indicator"></span>1. Analyze Trends</button>
+                    <button id="run-fetch" class="btn btn-primary"><span class="status-indicator"></span>2. Fetch Videos</button>
+                    <button id="run-analyze" class="btn btn-primary"><span class="status-indicator"></span>3. Curate Videos</button>
+                    <button id="run-generate" class="btn btn-primary"><span class="status-indicator"></span>4. Generate Content</button>
+                </div>
+                <div class="control-group">
+                    <button id="run-all" class="btn btn-success">Run All Steps</button>
+                    <button id="pause-toggle" class="btn btn-warning">Pause Workflow</button>
+                </div>
+            </section>
+            
+            <section class="content-section">
+                <h3>Step 1: Selected Trends</h3>
+                <div id="trends-results" class="results-grid"></div>
+            </section>
+            <section class="content-section">
+                <h3>Step 2 & 3: Fetched & Top Videos</h3>
+                <h4>Top Curated Videos</h4>
+                <div id="top-videos-results" class="results-grid"></div>
+                <h4 style="margin-top: 20px;">Other Fetched Videos</h4>
+                <div id="fetched-videos-results" class="results-grid"></div>
+            </section>
+             <section class="content-section">
+                <h3>Logs</h3>
+                <div id="log-output">Connecting to server...</div>
+            </section>
+        </div>
+
+        <div id="settings-tab" class="tab-content">
+            <section class="settings">
+                <h2>Preferences & API Keys</h2>
+                <p>These settings override server-side variables and are stored in your browser's local storage.</p>
+                <div class="form-group">
+                    <label for="gemini-key">Google Gemini API Key</label>
+                    <input type="password" id="gemini-key" placeholder="Enter your Gemini API Key">
+                </div>
+                <button id="save-settings" class="btn btn-primary">Save Settings</button>
+            </section>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let socket;
+        let currentProjects = [];
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+            socket.onopen = () => { logMessage("WebSocket connection established."); loadProjects(); };
+            socket.onmessage = handleWebSocketMessage;
+            socket.onclose = () => {
+                logMessage("WebSocket connection closed. Reconnecting in 5s...");
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+
+        function handleWebSocketMessage(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log' || data.type === 'error') {
+                logMessage(data.message);
+            } else if (data.type === 'status_update') {
+                updateStepStatus(data.step, data.status);
+            } else if (data.type === 'workflow_complete') {
+                $('.status-indicator').removeClass('running');
+                loadProjectData(); 
+            }
+        }
+
+        function logMessage(message) {
+            const logOutput = $('#log-output');
+            logOutput.append(`<div>${new Date().toLocaleTimeString()} - ${message}</div>`);
+            logOutput.scrollTop(logOutput[0].scrollHeight);
+        }
+
+        function openTab(evt, tabName) {
+            $('.tab-content, .tab-button').removeClass('active');
+            $(`#${tabName}, [onclick="openTab(event, '${tabName}')"]`).addClass('active');
+        }
+
+        async function loadProjects() {
+            try {
+                const response = await fetch('/projects');
+                currentProjects = await response.json();
+                const select = $('#project-select');
+                select.empty();
+                if (currentProjects.length === 0) {
+                    select.append('<option value="">No projects yet. Create one!</option>');
+                } else {
+                    currentProjects.forEach(p => select.append(`<option value="${p.id}">${p.name}</option>`));
+                    loadProjectData();
+                }
+            } catch (error) { logMessage("Error loading projects."); }
+        }
+        
+        async function createNewProject() {
+            const name = prompt("Enter a name for the new project:");
+            if (!name) return;
+            const description = prompt("Enter a brief description for the YouTube channel niche:", "A YouTube channel that compiles and gives commentary on viral videos and internet culture.");
+            if (!description) return;
+            
+            const response = await fetch('/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, channel_description: description })
+            });
+            if (response.ok) {
+                logMessage(`Project '${name}' created.`);
+                loadProjects();
+            } else { logMessage(`Error creating project '${name}'.`); }
+        }
+
+        async function loadProjectData() {
+            const projectId = $('#project-select').val();
+            if (!projectId) { clearResults(); return; }
+
+            const project = currentProjects.find(p => p.id == projectId);
+            updatePauseButton(project.is_paused);
+
+            try {
+                const response = await fetch(`/projects/${projectId}/summary`);
+                const data = await response.json();
+                renderResults(data);
+            } catch (error) { logMessage(`Error loading data for project ${projectId}.`); clearResults(); }
+        }
+
+        function clearResults() {
+            $('#trends-results, #fetched-videos-results, #top-videos-results').empty();
+            $('.status-indicator').removeClass('running complete error');
+        }
+
+        function renderResults(data) {
+            clearResults();
+            $('#trends-results').html(data.trends.map(t => `
+                <div class="card">
+                    <h4>${t.keyword}</h4>
+                    <p><span class="label">Title:</span> ${t.suggested_video_title}</p>
+                </div>`).join(''));
+            
+            updateStepStatus('trends', data.trends.length > 0 ? 'complete' : 'pending');
+
+            $('#fetched-videos-results').html(data.fetched_videos.map(v => renderVideoCard(v)).join(''));
+            $('#top-videos-results').html(data.top_videos.map(v => renderVideoCard(v, true)).join(''));
+
+            if (data.fetched_videos.length > 0 || data.top_videos.length > 0) {
+                 updateStepStatus('fetch', 'complete');
+            }
+             if (data.top_videos.length > 0) {
+                const allAnalyzed = [...data.fetched_videos, ...data.top_videos].every(v => v.sentiment_compound_score !== null);
+                if (allAnalyzed) updateStepStatus('analyze', 'complete');
+                const allGenerated = data.top_videos.every(v => v.generated_script);
+                if (allGenerated) updateStepStatus('generate', 'complete');
+            }
+        }
+
+        function renderVideoCard(v, isTop = false) {
+            const stats = v.stats || {};
+            return `
+                <div class="card" style="${isTop ? 'border-color: var(--success-color);' : ''}">
+                    <h4>@${v.author_username}</h4>
+                    <p>${v.description || 'No description'}</p>
+                    <p><span class="label">Plays:</span> ${stats.playCount || 0} | <span class="label">Likes:</span> ${stats.diggCount || 0}</p>
+                    <p><span class="label">Sentiment:</span> ${v.sentiment_polarity || 'N/A'} | <span class="label">Emotion:</span> ${v.emotion || 'N/A'}</p>
+                    ${isTop ? `<p><span class="label">Script:</span> ${v.generated_script || 'Not generated'}</p>` : ''}
+                </div>`;
+        }
+        
+        function getApiKeys() { return { gemini_api_key: localStorage.getItem('gemini_api_key') }; }
+
+        async function runStep(step) {
+            const projectId = $('#project-select').val();
+            if (!projectId) { alert("Please select a project."); return; }
+            logMessage(`Starting step: ${step}...`);
+            await fetch(`/run/${step}/${projectId}`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(getApiKeys())
+            });
+        }
+        
+        function updateStepStatus(step, status) {
+            const indicator = $(`#run-${step} .status-indicator`);
+            indicator.removeClass('running complete error').addClass(status);
+        }
+        
+        function updatePauseButton(isPaused) {
+            const btn = $('#pause-toggle');
+            btn.text(isPaused ? 'Resume Workflow' : 'Pause Workflow');
+            btn.toggleClass('btn-success', isPaused).toggleClass('btn-warning', !isPaused);
+        }
+
+        $(document).ready(() => {
+            connectWebSocket();
+
+            $('#project-select').on('change', loadProjectData);
+            $('#new-project-btn').on('click', createNewProject);
+            $('[id^=run-]').on('click', function() { runStep(this.id.split('-')[1]); });
+            
+            $('#run-all').on('click', async () => {
+                const projectId = $('#project-select').val();
+                if (!projectId) { alert("Please select a project."); return; }
+                logMessage("Starting full workflow...");
+                await fetch(`/run/all/${projectId}`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(getApiKeys())
+                });
+            });
+
+            $('#pause-toggle').on('click', async function() {
+                const projectId = $('#project-select').val();
+                if (!projectId) { alert("Please select a project."); return; }
+                const isCurrentlyPaused = $(this).text().includes('Resume');
+                const newState = !isCurrentlyPaused;
+                await fetch(`/projects/${projectId}/pause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_paused: newState })
+                });
+                updatePauseButton(newState);
+            });
+            
+            $('#save-settings').on('click', () => {
+                localStorage.setItem('gemini_api_key', $('#gemini-key').val());
+                logMessage("Settings saved to browser local storage.");
+            });
+            
+            $('#gemini-key').val(localStorage.getItem('gemini_api_key'));
+        });
+    </script>
+</body>
+</html>
+

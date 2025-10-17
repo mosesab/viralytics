@@ -1,0 +1,70 @@
+# config.yaml
+# Configuration for the Viral Video Content Pipeline
+
+# --- General Settings ---
+app_name: "Viral Video Content Pipeline"
+
+# --- Analysis Parameters ---
+# Number of top videos to select after analysis
+top_n_videos: 20
+# Minimum sentiment compound score for a video to be considered.
+# This score is from TextBlob's sentiment polarity.
+min_sentiment_score: 0.1
+# Maximum comments to fetch per video for analysis.
+max_comments_for_analysis: 50
+
+# --- Content Generation Parameters ---
+# Maximum comments to fetch per video to provide context for script generation.
+max_comments_for_scripting: 20
+
+# --- API Clients & Models ---
+# Google Gemini model for trend selection and script generation.
+gemini_model: "models/gemini-2.0-flash-lite"
+
+# --- LLM Prompts ---
+# These can be customized. Use {placeholders} for dynamic content.
+prompts:
+  trend_selection:
+    system_instruction: "You are a YouTube content strategist."
+    prompt_template: |
+      You are a YouTube content strategist for a channel with the following description:
+      '{channel_description}'
+
+      Your task is to analyze the following list of raw Google Trends and select the top 5-7 trends that would be most suitable for a new compilation video.
+
+      TREND LIST:
+      {trends_json}
+
+      CRITERIA FOR SELECTION:
+      1.  **Relevance:** Must fit the theme of 'viral videos and internet culture'. Avoid news, politics, or purely informational topics.
+      2.  **Visual Potential:** The trend should be something that can be represented visually with video clips.
+      3.  **Entertainment Value:** Prioritize topics that are humorous, surprising, or showcase impressive skills.
+      4.  **Longevity:** Favor trends that have the potential to be interesting even after the initial hype dies down.
+
+      For each selected trend, you must provide the keyword, a justification, a suggested video title, and whether it has long-term potential.
+      Respond ONLY with a valid JSON object that conforms to the specified schema.
+
+  script_generation:
+    system_instruction: "You are a scriptwriter for a YouTube channel."
+    prompt_template: |
+      You are a scriptwriter for a YouTube channel focused on viral videos and internet culture.
+      Your task is to write a short, engaging, and humorous script (2-3 sentences) to introduce a TikTok video.
+      The script should be in simple, A1-level English.
+
+      Here is the information about the video:
+      - **Description:** "{video_description}"
+      - **Author:** "{author_username}"
+      - **Top Comments:** {comments_json}
+
+      Based on the context, write the script. Adjust the style of the comment based on the video's content (e.g., funny, impressive, fail).
+      Respond ONLY with a valid JSON object that conforms to the specified schema.
+
+# --- Retry Logic ---
+# Configuration for API call retries using exponential backoff.
+retry:
+  # Wait 2^x * multiplier seconds between each retry, up to 'max_wait'.
+  wait_multiplier: 1
+  wait_max: 10
+  # Number of times to retry before giving up.
+  stop_max_attempt: 5
+
