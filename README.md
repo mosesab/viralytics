@@ -92,6 +92,7 @@ Modify `config.yaml` to tune the pipeline's behavior. You can change AI models, 
 2.  Install and setup playwright (It is a TikTokApi dependency):
     ```bash
     playwright install
+    playwright install-deps  
     ```
 3.  Start the FastAPI server:
     ```bash
