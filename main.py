@@ -111,6 +111,14 @@ class ApiKeys(BaseModel):
 class TogglePausePayload(BaseModel):
     is_paused: bool
 
+class RunPayload(BaseModel):
+    gemini_api_key: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    region: str = "US"
+
+
 # --- Utility Functions ---
 async def log_and_broadcast(message: str, type: str = "log"):
     logger.info(message)
@@ -157,14 +165,26 @@ async def toggle_pause(project_id: int, payload: TogglePausePayload):
     return {"message": f"Project {project_id} state set to {status}."}
 
 # --- Background Workflow Tasks ---
-# (The rest of the file remains unchanged)
-async def run_trends_task(project_id: int, keys: ApiKeys, config: dict):
+def get_overridden_config(payload: RunPayload, default_config: dict) -> dict:
+    """Merges the payload overrides into a copy of the default config."""
+    config = default_config.copy()
+    if payload.model:
+        config['gemini_model'] = payload.model
+    # Note: temperature and max_tokens are not in the base config, 
+    # but could be added to be used by the LLM client if needed.
+    if payload.temperature:
+        config.setdefault('llm', {})['temperature'] = payload.temperature
+    if payload.max_tokens:
+        config.setdefault('llm', {})['max_tokens'] = payload.max_tokens
+    return config
+
+async def run_trends_task(project_id: int, payload: RunPayload, config: dict):
     await broadcast_status("trends", "running", project_id)
     project_data = await database.get_project(project_id)
     if not project_data:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    analyzer = TrendAnalyzer(gemini_client=get_gemini_client(keys.gemini_api_key), config=config)
+    analyzer = TrendAnalyzer(gemini_client=get_gemini_client(payload.gemini_api_key), config=config)
     
     await log_and_broadcast("Starting trend analysis...")
     trends_list = await analyzer.get_google_trends()
@@ -179,31 +199,27 @@ async def run_trends_task(project_id: int, keys: ApiKeys, config: dict):
             await log_and_broadcast("Trend analysis complete.")
             await broadcast_status("trends", "complete", project_id)
         else:
-            raise HTTPException(status_code=500, detail="Failed to select trends.")
+            await log_and_broadcast("Failed to select trends.", type="error")
+            await broadcast_status("trends", "error", project_id)
     else:
-        raise HTTPException(status_code=500, detail="Failed to fetch Google Trends data.")
+        await log_and_broadcast("Failed to fetch Google Trends data.", type="error")
+        await broadcast_status("trends", "error", project_id)
 
-async def run_fetch_task(project_id: int, keys: ApiKeys, config: dict, tiktok_api: TikTokApi):
+
+async def run_fetch_task(project_id: int, payload: RunPayload, config: dict, tiktok_api: TikTokApi):
     await broadcast_status("fetch", "running", project_id)
-    summary = await database.get_project_summary(project_id)
-    if not summary['trends']:
-        raise HTTPException(status_code=400, detail="No trends found. Run trend analysis first.")
     
     fetcher = TikTokApiFetcher(tiktok_api=tiktok_api)
-    for trend in summary['trends']:
-        if await database.is_project_paused(project_id):
-            await log_and_broadcast("Workflow paused. Stopping before next fetch task.")
-            return
-        keyword = trend['keyword']
-        await log_and_broadcast(f"Fetching videos for trend: '{keyword}'")
-        videos = await fetcher.fetch_videos(keyword, count=50)
-        if videos:
-            await database.save_fetched_videos_to_db(project_id, keyword, videos)
+    await log_and_broadcast(f"Fetching top 50 trending videos for region: '{payload.region}'")
+    videos = await fetcher.fetch_trending_videos(count=50, region=payload.region)
+    if videos:
+        # Using region as the 'keyword' for grouping in the DB
+        await database.save_fetched_videos_to_db(project_id, payload.region, videos)
     await log_and_broadcast("Video fetching complete.")
     await broadcast_status("fetch", "complete", project_id)
 
 
-async def run_analyze_task(project_id: int, keys: ApiKeys, config: dict, tiktok_api: TikTokApi):
+async def run_analyze_task(project_id: int, payload: RunPayload, config: dict, tiktok_api: TikTokApi):
     await broadcast_status("analyze", "running", project_id)
     analyzer = VideoAnalyzer(tiktok_api=tiktok_api, config=config)
     
@@ -224,10 +240,10 @@ async def run_analyze_task(project_id: int, keys: ApiKeys, config: dict, tiktok_
     await broadcast_status("analyze", "complete", project_id)
 
 
-async def run_generate_task(project_id: int, keys: ApiKeys, config: dict, tiktok_api: TikTokApi):
+async def run_generate_task(project_id: int, payload: RunPayload, config: dict, tiktok_api: TikTokApi):
     await broadcast_status("generate", "running", project_id)
     generator = CommentaryGenerator(
-        gemini_client=get_gemini_client(keys.gemini_api_key),
+        gemini_client=get_gemini_client(payload.gemini_api_key),
         tiktok_api=tiktok_api,
         config=config
     )
@@ -252,9 +268,12 @@ async def run_generate_task(project_id: int, keys: ApiKeys, config: dict, tiktok
 
 
 @app.post("/run/{step}/{project_id}")
-async def run_step(step: str, project_id: int, keys: ApiKeys,
-                   config: dict = Depends(get_config),
+async def run_step(step: str, project_id: int, payload: RunPayload,
+                   default_config: dict = Depends(get_config),
                    tiktok_api: TikTokApi = Depends(get_tiktok_api)):
+    
+    config = get_overridden_config(payload, default_config)
+
     tasks = {
         "trends": run_trends_task,
         "fetch": run_fetch_task,
@@ -262,8 +281,7 @@ async def run_step(step: str, project_id: int, keys: ApiKeys,
         "generate": run_generate_task,
     }
     if step in tasks:
-        # Pass tiktok_api only if the task needs it
-        task_args = (project_id, keys, config)
+        task_args = (project_id, payload, config)
         if step in ["fetch", "analyze", "generate"]:
             task_args += (tiktok_api,)
 
@@ -278,10 +296,12 @@ async def run_step(step: str, project_id: int, keys: ApiKeys,
 
 
 @app.post("/run/all/{project_id}")
-async def run_all_steps(project_id: int, keys: ApiKeys,
-                        config: dict = Depends(get_config),
+async def run_all_steps(project_id: int, payload: RunPayload,
+                        default_config: dict = Depends(get_config),
                         tiktok_api: TikTokApi = Depends(get_tiktok_api)):
     
+    config = get_overridden_config(payload, default_config)
+
     async def workflow():
         steps = [
             (run_trends_task, "trends"),
@@ -290,19 +310,18 @@ async def run_all_steps(project_id: int, keys: ApiKeys,
             (run_generate_task, "generate")
         ]
         try:
-            for task, name in steps:
+            for task_func, name in steps:
                 if await database.is_project_paused(project_id):
                     await log_and_broadcast(f"Workflow for project {project_id} is paused. Halting execution.", type="log")
                     await broadcast_status(name, "paused", project_id)
                     return
                 
-                # Pass tiktok_api only if the task needs it
-                task_args = (project_id, keys, config)
+                task_args = (project_id, payload, config)
                 if name in ["fetch", "analyze", "generate"]:
                     task_args += (tiktok_api,)
 
-                await task(*task_args)
-                await asyncio.sleep(1) # Small buffer
+                await task_func(*task_args)
+                await asyncio.sleep(1) 
 
             await log_and_broadcast("Full workflow completed successfully!")
             await manager.broadcast_json({"type": "workflow_complete", "project_id": project_id})

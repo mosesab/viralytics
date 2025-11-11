@@ -44,6 +44,7 @@
         .status-indicator.error { background-color: var(--error-color); }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); } }
         #log-output { background-color: #000; color: #0f0; padding: 15px; border-radius: 5px; height: 200px; overflow-y: scroll; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; white-space: pre-wrap; }
+        .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
     </style>
 </head>
 
@@ -66,6 +67,20 @@
         <div id="workflow-tab" class="tab-content active">
             <section class="controls">
                 <h2>Controls</h2>
+                <div class="control-group">
+                    <div class="form-group">
+                        <label for="region-select">TikTok Region</label>
+                        <select id="region-select">
+                            <option value="US">United States</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="DE">Germany</option>
+                            <option value="FR">France</option>
+                            <option value="JP">Japan</option>
+                            <option value="KR">South Korea</option>
+                            <option value="BR">Brazil</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="control-group">
                     <button id="run-trends" class="btn btn-primary"><span class="status-indicator"></span>1. Analyze Trends</button>
                     <button id="run-fetch" class="btn btn-primary"><span class="status-indicator"></span>2. Fetch Videos</button>
@@ -97,11 +112,29 @@
 
         <div id="settings-tab" class="tab-content">
             <section class="settings">
-                <h2>Preferences & API Keys</h2>
+                <h2>Configuration Overrides</h2>
                 <p>These settings override server-side variables and are stored in your browser's local storage.</p>
-                <div class="form-group">
-                    <label for="gemini-key">Google Gemini API Key</label>
-                    <input type="password" id="gemini-key" placeholder="Enter your Gemini API Key">
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label for="gemini-api-key">Google Gemini API Key</label>
+                        <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API Key">
+                    </div>
+                    <div class="form-group">
+                        <label for="ms-token">TikTok MS_TOKEN</label>
+                        <input type="password" id="ms-token" placeholder="Enter TikTok ms_token (optional)">
+                    </div>
+                    <div class="form-group">
+                        <label for="model">LLM Model</label>
+                        <input type="text" id="model" placeholder="e.g., models/gemini-1.5-pro-latest">
+                    </div>
+                    <div class="form-group">
+                        <label for="temperature">LLM Temperature</label>
+                        <input type="number" id="temperature" step="0.1" min="0" max="1" placeholder="e.g., 0.7">
+                    </div>
+                    <div class="form-group">
+                        <label for="max-tokens">LLM Max Tokens</label>
+                        <input type="number" id="max-tokens" step="1" min="1" placeholder="e.g., 1024">
+                    </div>
                 </div>
                 <button id="save-settings" class="btn btn-primary">Save Settings</button>
             </section>
@@ -235,7 +268,16 @@
                 </div>`;
         }
         
-        function getApiKeys() { return { gemini_api_key: localStorage.getItem('gemini_api_key') }; }
+        function getRunPayload() {
+            return {
+                gemini_api_key: localStorage.getItem('gemini_api_key'),
+                ms_token: localStorage.getItem('ms_token'),
+                model: localStorage.getItem('model'),
+                temperature: localStorage.getItem('temperature') ? parseFloat(localStorage.getItem('temperature')) : null,
+                max_tokens: localStorage.getItem('max_tokens') ? parseInt(localStorage.getItem('max_tokens')) : null,
+                region: $('#region-select').val()
+            };
+        }
 
         async function runStep(step) {
             const projectId = $('#project-select').val();
@@ -244,7 +286,7 @@
             await fetch(`/run/${step}/${projectId}`, { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(getApiKeys())
+                body: JSON.stringify(getRunPayload())
             });
         }
         
@@ -259,8 +301,26 @@
             btn.toggleClass('btn-success', isPaused).toggleClass('btn-warning', !isPaused);
         }
 
+        function saveSettings() {
+            localStorage.setItem('gemini_api_key', $('#gemini-api-key').val());
+            localStorage.setItem('ms_token', $('#ms-token').val());
+            localStorage.setItem('model', $('#model').val());
+            localStorage.setItem('temperature', $('#temperature').val());
+            localStorage.setItem('max_tokens', $('#max-tokens').val());
+            logMessage("Settings saved to browser local storage.");
+        }
+
+        function loadSettings() {
+            $('#gemini-api-key').val(localStorage.getItem('gemini_api_key'));
+            $('#ms-token').val(localStorage.getItem('ms_token'));
+            $('#model').val(localStorage.getItem('model'));
+            $('#temperature').val(localStorage.getItem('temperature'));
+            $('#max-tokens').val(localStorage.getItem('max_tokens'));
+        }
+
         $(document).ready(() => {
             connectWebSocket();
+            loadSettings();
 
             $('#project-select').on('change', loadProjectData);
             $('#new-project-btn').on('click', createNewProject);
@@ -273,7 +333,7 @@
                 await fetch(`/run/all/${projectId}`, { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(getApiKeys())
+                    body: JSON.stringify(getRunPayload())
                 });
             });
 
@@ -290,14 +350,8 @@
                 updatePauseButton(newState);
             });
             
-            $('#save-settings').on('click', () => {
-                localStorage.setItem('gemini_api_key', $('#gemini-key').val());
-                logMessage("Settings saved to browser local storage.");
-            });
-            
-            $('#gemini-key').val(localStorage.getItem('gemini_api_key'));
+            $('#save-settings').on('click', saveSettings);
         });
     </script>
 </body>
 </html>
-
